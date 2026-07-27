@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Zipline Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #06090f;
+    --surface:   #0d1321;
+    --border:    #1a2540;
+    --accent:    #00e5ff;
+    --accent2:   #ff6d00;
+    --green:     #00e676;
+    --red:       #ff1744;
+    --warn:      #ffea00;
+    --text:      #e0eaff;
+    --muted:     #4a5568;
+    --mono:      'Share Tech Mono', monospace;
+    --sans:      'Rajdhani', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── SCANLINE overlay ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,229,255,.018) 2px,
+      rgba(0,229,255,.018) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 20px; font-weight: 700; letter-spacing: 3px;
+    text-transform: uppercase; color: var(--accent);
+    text-shadow: 0 0 18px rgba(0,229,255,.5);
+  }
+
+  .logo svg { filter: drop-shadow(0 0 6px var(--accent)); }
+
+  .header-right {
+    display: flex; align-items: center; gap: 18px;
+  }
+
+  .hdr-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .pulse-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 0 rgba(0,230,118,.5);
+    animation: pulse-ring 2s infinite;
+  }
+
+  @keyframes pulse-ring {
+    0%   { box-shadow: 0 0 0 0 rgba(0,230,118,.5); }
+    70%  { box-shadow: 0 0 0 10px rgba(0,230,118,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,230,118,0); }
+  }
+
+  /* ── MAIN LAYOUT ── */
+  main {
+    padding: 18px 16px 30px;
+    display: grid;
+    gap: 14px;
+    max-width: 540px;
+    margin: 0 auto;
+  }
+
+  /* ── CARD BASE ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: .4;
+  }
+
+  .card-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  /* ── METRICS GRID ── */
+  .metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .3s;
+  }
+
+  .metric-card.highlight { border-color: rgba(0,229,255,.35); }
+
+  .metric-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 0 0 10px 10px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transition: transform .4s ease;
+  }
+
+  .metric-card.updated::after { transform: scaleX(1); }
+
+  .metric-icon {
+    font-size: 20px;
+    margin-bottom: 6px;
+  }
+
+  .metric-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .metric-value {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: bold;
+    color: var(--accent);
+    text-shadow: 0 0 14px rgba(0,229,255,.4);
+    transition: color .3s;
+    line-height: 1;
+  }
+
+  .metric-value.warn { color: var(--warn); text-shadow: 0 0 14px rgba(255,234,0,.4); }
+  .metric-value.danger { color: var(--red); text-shadow: 0 0 14px rgba(255,23,68,.4); }
+
+  .metric-bar {
+    margin-top: 8px;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width .6s ease;
+  }
+
+  /* ── SPEED GAUGE ── */
+  .gauge-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+  }
+
+  .gauge-svg { filter: drop-shadow(0 0 8px rgba(0,229,255,.3)); }
+
+  .gauge-readout {
+    text-align: center;
+  }
+
+  .gauge-readout .big {
+    font-family: var(--mono);
+    font-size: 44px;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,229,255,.5);
+    line-height: 1;
+  }
+
+  .gauge-readout .unit {
+    font-size: 14px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    margin-top: 2px;
+  }
+
+  /* ── STATUS BAR ── */
+  .status-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .status-icon {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background .3s, box-shadow .3s;
+  }
+
+  .status-icon.ready  { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
+  .status-icon.running { background: var(--green); box-shadow: 0 0 14px var(--green); animation: pulse-ring 1.5s infinite; }
+  .status-icon.stopped { background: var(--red); box-shadow: 0 0 10px var(--red); }
+
+  .status-text {
+    font-family: var(--mono);
+    font-size: 22px;
+    letter-spacing: 3px;
+    transition: color .3s;
+  }
+
+  .status-text.ready   { color: var(--warn); }
+  .status-text.running { color: var(--green); text-shadow: 0 0 14px rgba(0,230,118,.5); }
+  .status-text.stopped { color: var(--red); }
+
+  .run-timer {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--muted);
+    letter-spacing: 2px;
+  }
+
+  /* ── CONTROLS ── */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .btn {
+    border: none;
+    padding: 14px 10px;
+    border-radius: 10px;
+    font-family: var(--sans);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform .12s, box-shadow .2s;
+  }
+
+  .btn:active { transform: scale(.96); }
+
+  .btn-start {
+    background: linear-gradient(135deg, #00c853, #00e676);
+    color: #000;
+    box-shadow: 0 0 0 rgba(0,230,118,0);
+  }
+
+  .btn-start:hover { box-shadow: 0 0 24px rgba(0,230,118,.45); }
+
+  .btn-stop {
+    background: linear-gradient(135deg, #b71c1c, #ff1744);
+    color: #fff;
+    box-shadow: 0 0 0 rgba(255,23,68,0);
+  }
+
+  .btn-stop:hover { box-shadow: 0 0 24px rgba(255,23,68,.45); }
+
+  /* ── CHART ── */
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .chart-legend {
+    display: flex;
+    gap: 14px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  canvas#chart {
+    background: transparent !important;
+    border-radius: 0;
+    display: block;
+  }
+
+  /* ── ALERTS ── */
+  .alerts-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 40px;
+  }
+
+  .alert-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    letter-spacing: .5px;
+    animation: slide-in .3s ease;
+    border-left: 3px solid transparent;
+  }
+
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateX(-10px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .alert-item.info  { background: rgba(0,229,255,.08); border-color: var(--accent); color: var(--accent); }
+  .alert-item.warn  { background: rgba(255,234,0,.08); border-color: var(--warn); color: var(--warn); }
+  .alert-item.error { background: rgba(255,23,68,.08); border-color: var(--red); color: var(--red); }
+
+  .alert-time {
+    font-family: var(--mono);
+    font-size: 10px;
+    opacity: .6;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    border-top: 1px solid var(--border);
+    margin-top: 10px;
+  }
+
+  /* ── RIDE COUNTER ── */
+  .ride-counter {
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 0;
+  }
+
+  .ride-stat { text-align: center; }
+
+  .ride-stat .rs-val {
+    font-family: var(--mono);
+    font-size: 28px;
+    color: var(--accent2);
+    text-shadow: 0 0 14px rgba(255,109,0,.4);
+    line-height: 1;
+  }
+
+  .ride-stat .rs-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .divider { width: 1px; background: var(--border); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+      <circle cx="13" cy="13" r="12" stroke="#00e5ff" stroke-width="1.5"/>
+      <path d="M5 18 L13 8 L21 18" stroke="#00e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="13" cy="13" r="3" fill="#00e5ff" opacity=".8"/>
+    </svg>
+    Smart Zipline
+  </div>
+  <div class="header-right">
+    <span class="hdr-badge" id="hdr-time">--:--:--</span>
+    <div class="pulse-dot" id="pulse"></div>
+  </div>
+</header>
+
+<main>
+
+  <!-- SPEED GAUGE -->
+  <div class="card">
+    <div class="card-label">▶ Live Speed</div>
+    <div class="gauge-wrap">
+      <svg class="gauge-svg" width="200" height="110" viewBox="0 0 200 110">
+        <defs>
+          <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stop-color="#00e5ff"/>
+            <stop offset="100%" stop-color="#ff6d00"/>
+          </linearGradient>
+        </defs>
+        <!-- Track -->
+        <path d="M 20 100 A 80 80 0 0 1 180 100" stroke="#1a2540" stroke-width="12" fill="none" stroke-linecap="round"/>
+        <!-- Fill arc -->
+        <path id="gauge-arc" d="M 20 100 A 80 80 0 0 1 180 100"
+              stroke="url(#gaugeGrad)" stroke-width="12" fill="none" stroke-linecap="round"
+              stroke-dasharray="251" stroke-dashoffset="200"
+              style="transition: stroke-dashoffset .6s ease;"/>
+        <!-- Tick marks -->
+        <g stroke="#4a5568" stroke-width="1">
+          <line x1="100" y1="22" x2="100" y2="30"/>
+          <line x1="43" y1="43" x2="49" y2="49"/>
+          <line x1="157" y1="43" x2="151" y2="49"/>
+          <line x1="20" y1="100" x2="28" y2="100"/>
+          <line x1="180" y1="100" x2="172" y2="100"/>
+        </g>
+        <!-- Labels -->
+        <text x="95" y="20" fill="#4a5568" font-size="8" font-family="Share Tech Mono">5</text>
+        <text x="30" y="47" fill="#4a5568" font-size="8" font-family="Share Tech Mono">2</text>
+        <text x="156" y="47" fill="#4a5568" font-size="8" font-family="Share Tech Mono">8</text>
+      </svg>
+      <div class="gauge-readout">
+        <div class="big" id="speed-big">3.5</div>
+        <div class="unit">m / s</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- METRICS GRID -->
+  <div class="metrics">
+    <div class="metric-card" id="card-battery">
+      <div class="metric-icon">🔋</div>
+      <div class="metric-label">Battery</div>
+      <div class="metric-value" id="battery">100%</div>
+      <div class="metric-bar"><div class="metric-bar-fill" id="battery-bar" style="width:100%"></div></div>
+    </div>
+    <div class="metric-card" id="card-voltage">
+      <div class="metric-icon">⚡</div>
+      <div class="metric-label">Voltage</div>
+      <div class="metric-value" id="voltage">18.5V</div>
+      <div class="metric-bar"><div class="metric-bar-fill" id="voltage-bar" style="width:80%"></div></div>
+    </div>
+    <div class="metric-card" id="card-current">
+      <div class="metric-icon">🔌</div>
+      <div class="metric-label">Current</div>
+      <div class="metric-value" id="current">4.2A</div>
+      <div class="metric-bar"><div class="metric-bar-fill" id="current-bar" style="width:50%"></div></div>
+    </div>
+    <div class="metric-card" id="card-temp">
+      <div class="metric-icon">🌡️</div>
+      <div class="metric-label">Temp</div>
+      <div class="metric-value" id="temp">32°C</div>
+      <div class="metric-bar"><div class="metric-bar-fill" id="temp-bar" style="width:45%;background:linear-gradient(90deg,#00e5ff,#ff6d00)"></div></div>
+    </div>
+  </div>
+
+  <!-- RIDE STATS -->
+  <div class="card">
+    <div class="card-label">▶ Session Stats</div>
+    <div class="ride-counter">
+      <div class="ride-stat">
+        <div class="rs-val" id="stat-rides">0</div>
+        <div class="rs-label">Rides</div>
+      </div>
+      <div class="divider"></div>
+      <div class="ride-stat">
+        <div class="rs-val" id="stat-dist">0.0</div>
+        <div class="rs-label">Km</div>
+      </div>
+      <div class="divider"></div>
+      <div class="ride-stat">
+        <div class="rs-val" id="stat-maxspd">0.0</div>
+        <div class="rs-label">Max m/s</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATUS + CONTROLS -->
+  <div class="card">
+    <div class="card-label">▶ System</div>
+    <div class="status-panel">
+      <div class="status-indicator">
+        <div class="status-icon ready" id="status-dot"></div>
+        <div class="status-text ready" id="status">READY</div>
+      </div>
+      <div class="run-timer" id="run-timer">00:00</div>
+    </div>
+    <br>
+    <div class="controls">
+      <button class="btn btn-start" onclick="startSystem()">▶ START</button>
+      <button class="btn btn-stop"  onclick="stopSystem()">■ STOP</button>
+    </div>
+  </div>
+
+  <!-- CHART -->
+  <div class="card">
+    <div class="chart-header">
+      <div class="card-label" style="margin:0">▶ Live Telemetry</div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#00e5ff"></div>Speed</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff6d00"></div>Temp</div>
+      </div>
+    </div>
+    <canvas id="chart" height="140"></canvas>
+  </div>
+
+  <!-- ALERTS LOG -->
+  <div class="card">
+    <div class="card-label">▶ Event Log</div>
+    <div class="alerts-wrap" id="alerts">
+      <div class="alert-item info">🔵 System initialised<span class="alert-time" id="init-time">--</span></div>
+    </div>
+  </div>
+
+</main>
+
+<footer>SMART ZIPLINE v2.4 · ANTHROPIC EMBEDDED · ALL SYSTEMS NOMINAL</footer>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// 🔧 BLYNK CONFIG — แก้ตรงนี้อย่างเดียวก่อนอัปโหลด GitHub
+// ══════════════════════════════════════════════════════════════════
+const BLYNK_TOKEN = "ใส่_Auth_Token_ของคุณตรงนี้";
+//   ^ คัดลอกจาก blynk.cloud → Devices → Device Info → Auth Token
+// ══════════════════════════════════════════════════════════════════
+
+const BLYNK_BASE = "https://blynk.cloud/external/api";
+
+// ── State ──────────────────────────────────────────────────────────
+let running = false;
+let runSeconds = 0;
+let runInterval = null;
+let rides = 0;
+let totalDist = 0;
+let maxSpd = 0;
+const MAX_ALERTS = 5;
+
+// ── DOM refs ───────────────────────────────────────────────────────
+const statusDot  = document.getElementById('status-dot');
+const statusText = document.getElementById('status');
+const runTimer   = document.getElementById('run-timer');
+const speedBig   = document.getElementById('speed-big');
+const gaugeArc   = document.getElementById('gauge-arc');
+const hdrTime    = document.getElementById('hdr-time');
+const pulse      = document.getElementById('pulse');
+
+// ── Chart setup ───────────────────────────────────────────────────
+const labels = Array.from({length:20}, (_,i)=> i+1);
+const speedData = Array(20).fill(0);
+const tempData  = Array(20).fill(30);
+
+const chart = new Chart(document.getElementById('chart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Speed (m/s)',
+        data: speedData,
+        borderColor: '#00e5ff',
+        backgroundColor: 'rgba(0,229,255,.07)',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: .45,
+        fill: true,
+      },
+      {
+        label: 'Temp (°C)',
+        data: tempData,
+        borderColor: '#ff6d00',
+        backgroundColor: 'rgba(255,109,0,.06)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: .4,
+        fill: true,
+        yAxisID: 'y2',
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    animation: { duration: 300 },
+    plugins: { legend: { display: false }, tooltip: {
+      mode: 'index', intersect: false,
+      backgroundColor: '#0d1321',
+      borderColor: '#1a2540',
+      borderWidth: 1,
+      titleColor: '#4a5568',
+      bodyColor: '#e0eaff',
+      titleFont: { family: 'Share Tech Mono', size: 10 },
+    }},
+    scales: {
+      x: { display: false },
+      y: {
+        min: 0, max: 10,
+        ticks: { color: '#4a5568', font: { family: 'Share Tech Mono', size: 9 }, stepSize: 2 },
+        grid: { color: 'rgba(26,37,64,.8)' },
+        border: { color: 'transparent' },
+      },
+      y2: {
+        position: 'right',
+        min: 20, max: 60,
+        ticks: { color: '#4a5568', font: { family: 'Share Tech Mono', size: 9 }, stepSize: 10 },
+        grid: { display: false },
+        border: { color: 'transparent' },
+      }
+    }
+  }
+});
+
+// ── Clock ─────────────────────────────────────────────────────────
+function tickClock() {
+  const now = new Date();
+  hdrTime.textContent = now.toLocaleTimeString('th-TH', { hour12: false });
+}
+tickClock();
+setInterval(tickClock, 1000);
+document.getElementById('init-time').textContent = new Date().toLocaleTimeString('th-TH', { hour12: false });
+
+// ── Run timer ─────────────────────────────────────────────────────
+function startTimer() {
+  runInterval = setInterval(() => {
+    runSeconds++;
+    const m = String(Math.floor(runSeconds/60)).padStart(2,'0');
+    const s = String(runSeconds % 60).padStart(2,'0');
+    runTimer.textContent = `${m}:${s}`;
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(runInterval);
+  runInterval = null;
+}
+
+// ── Alert log ─────────────────────────────────────────────────────
+function addAlert(msg, type = 'info') {
+  const wrap = document.getElementById('alerts');
+  const icons = { info: '🔵', warn: '🟡', error: '🔴' };
+  const el = document.createElement('div');
+  el.className = `alert-item ${type}`;
+  el.innerHTML = `${icons[type]} ${msg}<span class="alert-time">${new Date().toLocaleTimeString('th-TH',{hour12:false})}</span>`;
+  wrap.prepend(el);
+  while (wrap.children.length > MAX_ALERTS) wrap.removeChild(wrap.lastChild);
+}
+
+// ── Controls ──────────────────────────────────────────────────────
+function startSystem() {
+  if (running) return;
+  running = true;
+  runSeconds = 0;
+  rides++;
+  document.getElementById('stat-rides').textContent = rides;
+  setStatus('running', 'RUNNING');
+  startTimer();
+  addAlert('Ride started — motors engaged', 'info');
+}
+
+function stopSystem() {
+  if (!running) return;
+  running = false;
+  setStatus('stopped', 'STOPPED');
+  stopTimer();
+  addAlert(`Ride ended — ${document.getElementById('stat-dist').textContent} km logged`, 'info');
+}
+
+function setStatus(cls, label) {
+  statusDot.className  = `status-icon ${cls}`;
+  statusText.className = `status-text ${cls}`;
+  statusText.textContent = label;
+}
+
+// ── Gauge arc ─────────────────────────────────────────────────────
+function setGauge(speed, maxSpeed = 10) {
+  const pct = Math.min(speed / maxSpeed, 1);
+  const arcLen = 251;
+  gaugeArc.style.strokeDashoffset = arcLen - pct * arcLen;
+}
+
+// ── Flash card ────────────────────────────────────────────────────
+function flash(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('updated');
+  setTimeout(() => el.classList.remove('updated'), 600);
+}
+
+// ── อัปเดต UI จากข้อมูลจริง ───────────────────────────────────────
+function updateUI(spd, voltage, current, battery, tmp) {
+  // values
+  document.getElementById('battery').textContent = battery + '%';
+  document.getElementById('voltage').textContent = voltage.toFixed(1) + 'V';
+  document.getElementById('current').textContent = current.toFixed(1) + 'A';
+  document.getElementById('temp').textContent    = tmp.toFixed(0) + '°C';
+  speedBig.textContent = spd.toFixed(1);
+
+  // bars
+  document.getElementById('battery-bar').style.width = battery + '%';
+  document.getElementById('voltage-bar').style.width = Math.min(((voltage-16)/6*100),100).toFixed(0) + '%';
+  document.getElementById('current-bar').style.width = Math.min(((current-2)/6*100),100).toFixed(0) + '%';
+  document.getElementById('temp-bar').style.width    = Math.min(((tmp-20)/40*100),100).toFixed(0) + '%';
+
+  // colour warnings
+  document.getElementById('battery').className =
+    'metric-value' + (battery < 20 ? ' danger' : battery < 40 ? ' warn' : '');
+  document.getElementById('temp').className =
+    'metric-value' + (tmp > 40 ? ' danger' : tmp > 36 ? ' warn' : '');
+
+  // gauge
+  setGauge(spd);
+
+  // session stats
+  if (running) {
+    totalDist = +(totalDist + spd * 2 / 1000).toFixed(3);
+    document.getElementById('stat-dist').textContent = totalDist.toFixed(2);
+  }
+  if (spd > maxSpd) {
+    maxSpd = spd;
+    document.getElementById('stat-maxspd').textContent = maxSpd.toFixed(1);
+  }
+
+  // chart
+  speedData.shift(); speedData.push(spd);
+  tempData.shift();  tempData.push(tmp);
+  chart.data.datasets[0].data = [...speedData];
+  chart.data.datasets[1].data = [...tempData];
+  chart.update('none');
+
+  // flash cards
+  ['card-battery','card-voltage','card-current','card-temp'].forEach(flash);
+
+  // auto alerts
+  if (tmp > 40)    addAlert(`🌡️ อุณหภูมิวิกฤต: ${tmp.toFixed(0)}°C`, 'error');
+  else if (tmp > 36) addAlert(`🌡️ อุณหภูมิสูง: ${tmp.toFixed(0)}°C`, 'warn');
+  if (battery < 20) addAlert(`🔋 แบตเตอรี่วิกฤต: ${battery}%`, 'error');
+  else if (battery < 40) addAlert(`🔋 แบตเตอรี่ต่ำ: ${battery}%`, 'warn');
+}
+
+// ── ดึงข้อมูลจาก Blynk Cloud ──────────────────────────────────────
+let fetchError = false;
+
+async function fetchFromBlynk() {
+  // ถ้ายังไม่ได้ใส่ Token จะใช้ข้อมูลจำลองแทน
+  if (BLYNK_TOKEN === "ใส่_Auth_Token_ของคุณตรงนี้" || BLYNK_TOKEN === "") {
+    useDemoData();
+    return;
+  }
+
+  try {
+    const pins = ['v0','v1','v2','v3','v4'];
+    const res = await Promise.all(
+      pins.map(p =>
+        fetch(`${BLYNK_BASE}/get?token=${BLYNK_TOKEN}&${p}`)
+          .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      )
+    );
+
+    const spd     = parseFloat(res[0]) || 0;
+    const voltage = parseFloat(res[1]) || 0;
+    const current = parseFloat(res[2]) || 0;
+    const battery = parseInt(res[3])   || 0;
+    const tmp     = parseFloat(res[4]) || 0;
+
+    if (fetchError) {
+      addAlert('✅ เชื่อมต่อ Blynk สำเร็จ', 'info');
+      fetchError = false;
+    }
+
+    updateUI(spd, voltage, current, battery, tmp);
+
+  } catch (err) {
+    if (!fetchError) {
+      addAlert('⚠️ เชื่อมต่อ Blynk ไม่ได้ — ตรวจสอบ Token / WiFi', 'warn');
+      fetchError = true;
+    }
+    // fallback demo ให้หน้าไม่ค้าง
+    useDemoData();
+  }
+}
+
+// ── Demo data (ใช้เมื่อยังไม่มี Token หรือ offline) ───────────────
+function useDemoData() {
+  const spd     = parseFloat((Math.random()*3 + (running?2.5:0.2)).toFixed(1));
+  const voltage = parseFloat((Math.random()*2 + 17).toFixed(1));
+  const current = parseFloat((Math.random()*4 + 2).toFixed(1));
+  const battery = Math.floor(Math.random()*20 + 80);
+  const tmp     = parseFloat((Math.random()*10 + 28).toFixed(1));
+  updateUI(spd, voltage, current, battery, tmp);
+}
+
+// ── เริ่มดึงข้อมูล ────────────────────────────────────────────────
+fetchFromBlynk();
+setInterval(fetchFromBlynk, 2000);
+</script>
+</body>
+</html>
